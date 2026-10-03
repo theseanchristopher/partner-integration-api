@@ -3,8 +3,14 @@ import binascii
 import json
 import logging
 
+from authorization import (
+    authorize_request,
+    UnauthenticatedError,
+    ForbiddenError,
+)
+
 from backends import MerchantNotFoundError
-from service import check_eligibility, InvalidRequestError
+from service import check_eligibility, validate_request, InvalidRequestError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,8 +42,22 @@ def lambda_handler(event, context):
         except json.JSONDecodeError:
             raise InvalidRequestError("Request body must be valid JSON")
 
+        validate_request(request)
+        authorize_request(event, request)
         result = check_eligibility(request)
         return http_response(200, result)
+
+    except UnauthenticatedError as error:
+        return http_response(401, {
+            "code": "UNAUTHENTICATED",
+            "message": str(error),
+        })
+
+    except ForbiddenError as error:
+        return http_response(403, {
+            "code": "FORBIDDEN",
+            "message": str(error),
+        })
 
     except InvalidRequestError as error:
         return http_response(400, {
