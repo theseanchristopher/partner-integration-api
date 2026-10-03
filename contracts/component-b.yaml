@@ -1,0 +1,45 @@
+openapi: 3.0.3
+
+info:
+  title: Simulated Component B API
+  version: 0.1.0
+
+paths:
+  /account-status:
+    post:
+      summary: Look up merchant account status
+      operationId: getAccountStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - accountReference
+              properties:
+                accountReference:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  pattern: '^[A-Za-z0-9_-]+$'
+      responses:
+        '200':
+          description: Account found; enabled means active and eligible
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - accountReference
+                  - enabled
+                properties:
+                  accountReference:
+                    type: string
+                  enabled:
+                    type: boolean
+        '404':
+          description: Account not found
+        '500':
+          description: Unexpected internal failure
