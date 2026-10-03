@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: OAuth client credentials authentication for the partner API
+
+Resources:
+  PartnerUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-partners'
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+
+  PartnerResourceServer:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Properties:
+      UserPoolId: !Ref PartnerUserPool
+      Identifier: partner-api
+      Name: Partner Eligibility API
+      Scopes:
+        - ScopeName: eligibility.read
+          ScopeDescription: Read merchant eligibility
+
+  PartnerClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: PartnerResourceServer
+    Properties:
+      UserPoolId: !Ref PartnerUserPool
+      ClientName: demo-partner
+      GenerateSecret: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - client_credentials
+      AllowedOAuthScopes:
+        - partner-api/eligibility.read
+      AccessTokenValidity: 60
+      TokenValidityUnits:
+        AccessToken: minutes
+
+  PartnerDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref PartnerUserPool
+      Domain: !Sub 'partner-api-${AWS::AccountId}-${AWS::Region}'
+
+Outputs:
+  UserPoolId:
+    Value: !Ref PartnerUserPool
+
+  ClientId:
+    Value: !Ref PartnerClient
+
+  IssuerUrl:
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${PartnerUserPool}'
+
+  TokenUrl:
+    Value: !Sub 'https://${PartnerDomain}.auth.${AWS::Region}.amazoncognito.com/oauth2/token'
+
+  RequiredScope:
+    Value: partner-api/eligibility.read

@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Synchronous partner eligibility API with JWT authentication
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: Cognito user pool ID from the authentication stack
+
+  PartnerClientId:
+    Type: String
+    Description: Cognito app client ID from the authentication stack
+
+  CodeBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda deployment package
+
+  CodeKey:
+    Type: String
+    Description: S3 object key for the Lambda deployment package
+
+Resources:
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-eligibility'
+      RetentionInDays: 7
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteFunctionLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt LambdaLogGroup.Arn
+
+  EligibilityFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-eligibility'
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          PARTNER_ACCESS_MAP: !Sub |
+            {
+              "${PartnerClientId}": {
+                "merchant-1001": ["COMPONENT_A", "COMPONENT_B"]
+              }
+            }
+
+  PartnerApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      ProtocolType: HTTP
+
+  JwtAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref PartnerApi
+      Name: PartnerJwtAuthorizer
+      AuthorizerType: JWT
+      IdentitySource:
+        - '$request.header.Authorization'
+      JwtConfiguration:
+        Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+        Audience:
+          - !Ref PartnerClientId
+
+  LambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref PartnerApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt EligibilityFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 12000
+
+  EligibilityRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref PartnerApi
+      RouteKey: 'POST /partner-eligibility'
+      Target: !Sub 'integrations/${LambdaIntegration}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizer
+      AuthorizationScopes:
+        - partner-api/eligibility.read
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EligibilityFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PartnerApi}/*/POST/partner-eligibility'
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/partner-api/${AWS::StackName}/access'
+      RetentionInDays: 7
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref PartnerApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5
+        ThrottlingRateLimit: 2
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","routeKey":"$context.routeKey","status":"$context.status","responseLatency":"$context.responseLatency","integrationError":"$context.integrationErrorMessage"}'
+
+Outputs:
+  EligibilityUrl:
+    Value: !Sub '${PartnerApi.ApiEndpoint}/partner-eligibility'
+
+  FunctionName:
+    Value: !Ref EligibilityFunction
+
+  FunctionLogGroup:
+    Value: !Ref LambdaLogGroup
+
+  ApiAccessLogGroup:
+    Value: !Ref ApiLogGroup
