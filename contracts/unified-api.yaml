@@ -1,0 +1,115 @@
+openapi: 3.0.3
+
+info:
+  title: Unified Partner Eligibility API
+  version: 0.1.0
+
+paths:
+  /partner-eligibility:
+    post:
+      summary: Check merchant eligibility through a selected component
+      operationId: checkMerchantEligibility
+      security:
+        - partnerOAuth:
+            - partner-api/eligibility.read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EligibilityRequest'
+            example:
+              merchantId: merchant-1001
+              component: COMPONENT_A
+      responses:
+        '200':
+          description: Lookup completed, whether eligible or not
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResponse'
+        '400':
+          description: Invalid JSON, missing fields, or invalid values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing, invalid, or expired access token
+        '403':
+          description: Required scope missing or access to merchant or component denied
+        '404':
+          description: Merchant not found in the selected component
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    partnerOAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://AUTH_DOMAIN/oauth2/token
+          scopes:
+            partner-api/eligibility.read: Read merchant eligibility
+
+  schemas:
+    EligibilityRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - merchantId
+        - component
+      properties:
+        merchantId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9_-]+$'
+        component:
+          type: string
+          enum:
+            - COMPONENT_A
+            - COMPONENT_B
+
+    EligibilityResponse:
+      type: object
+      required:
+        - merchantId
+        - component
+        - eligible
+        - status
+      properties:
+        merchantId:
+          type: string
+        component:
+          type: string
+          enum:
+            - COMPONENT_A
+            - COMPONENT_B
+        eligible:
+          type: boolean
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
