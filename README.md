@@ -14,7 +14,7 @@ External clients use one request and response format. The service routes each re
 - CloudFormation stacks for authentication, deployment storage, and API service
 - CloudWatch API access logs and Lambda execution logs
 - Deployment script verified against existing stacks
-- Cleanup script syntax checked; deletion and recreation not yet tested
+- Cleanup and recreation verified, including authenticated API access
 
 ## Planned
 - Asynchronous processing with SQS
@@ -117,7 +117,7 @@ It empties the deployment bucket before deleting that stack.
 Cleanup removes the API endpoint, Cognito client, uploaded packages, and project log groups. Local files and the Git repository remain intact.
 
 The current cleanup script expects the artifact stack to exist.
-Its syntax has been checked; a complete deletion and recreation cycle has not yet been verified.
+A complete deletion and recreation cycle has been verified, followed by successful authenticated API access.
 
 After recreation, retrieve the new endpoint and authentication outputs and obtain a new access token.
 
@@ -148,3 +148,14 @@ aws logs tail /partner-api/partner-api-service/access \
 aws logs tail /aws/lambda/partner-api-service-eligibility \
   --since 15m --region us-east-1 --no-cli-pager
 ```
+
+## Obtain an access token
+
+The helper retrieves the current Cognito client credentials using the operator's AWS permissions and requests an access token.
+
+```bash
+ACCESS_TOKEN=$(python scripts/get_token.py)
+```
+
+Capture the output as shown; running the helper directly displays the token.
+External partners would use their securely provisioned credentials rather than retrieve them through our AWS account.
