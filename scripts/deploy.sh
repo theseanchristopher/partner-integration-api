@@ -89,6 +89,9 @@ aws cloudformation deploy \
   --region "$REGION" \
   --no-cli-pager
 
+API_ID=$(stack_output partner-api-service ApiId)
+JWT_AUTHORIZER_ID=$(stack_output partner-api-service JwtAuthorizerId)
+
 echo "Deploying asynchronous resources..."
 aws cloudformation deploy \
   --template-file infrastructure/async.yaml \
@@ -96,6 +99,9 @@ aws cloudformation deploy \
   --parameter-overrides \
     CodeBucket="$CODE_BUCKET" \
     CodeKey="$CODE_KEY" \
+    ApiId="$API_ID" \
+    JwtAuthorizerId="$JWT_AUTHORIZER_ID" \
+    PartnerClientId="$PARTNER_CLIENT_ID" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --region "$REGION" \

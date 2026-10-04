@@ -34,7 +34,10 @@ request = urllib.request.Request(
     outputs["TokenUrl"],
     data=urllib.parse.urlencode({
         "grant_type": "client_credentials",
-        "scope": outputs["RequiredScope"]
+        "scope": " ".join([
+            outputs["RequiredScope"],
+            outputs["SubmitScope"]
+        ])
     }).encode(),
     headers={
         "Authorization": f"Basic {credentials}",

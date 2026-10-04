@@ -8,6 +8,15 @@ Parameters:
   CodeKey:
     Type: String
     Description: S3 object key for the Lambda deployment package
+  ApiId:
+    Type: String
+    Description: Existing HTTP API ID from the service stack
+  JwtAuthorizerId:
+    Type: String
+    Description: Existing JWT authorizer ID from the service stack
+  PartnerClientId:
+    Type: String
+    Description: Cognito client ID for merchant access configuration
 
 Resources:
   RequestTable:
@@ -122,6 +131,172 @@ Resources:
         OnFailure:
           Destination: !GetAtt DispatchFailureQueue.Arn
 
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-worker'
+      RetentionInDays: 7
+
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ProcessRequests
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ProcessingQueue.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt RequestTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt WorkerLogGroup.Arn
+
+  WorkerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-worker'
+      Runtime: python3.12
+      Handler: worker.lambda_handler
+      Role: !GetAtt WorkerRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          REQUEST_TABLE_NAME: !Ref RequestTable
+
+  WorkerQueueMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt ProcessingQueue.Arn
+      FunctionName: !Ref WorkerFunction
+      BatchSize: 1
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+  AsyncApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 7
+
+  AsyncApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ManageEligibilityRequests
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt RequestTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt AsyncApiLogGroup.Arn
+
+  AsyncApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-api'
+      Runtime: python3.12
+      Handler: async_handler.lambda_handler
+      Role: !GetAtt AsyncApiRole.Arn
+      Timeout: 10
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          REQUEST_TABLE_NAME: !Ref RequestTable
+          PARTNER_ACCESS_MAP: !Sub |
+            {
+              "${PartnerClientId}": {
+                "merchant-1001": ["COMPONENT_A", "COMPONENT_B"]
+              }
+            }
+
+  AsyncApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AsyncApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 12000
+
+  SubmitRequestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiId
+      RouteKey: 'POST /eligibility-requests'
+      Target: !Sub 'integrations/${AsyncApiIntegration}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizerId
+      AuthorizationScopes:
+        - partner-api/eligibility.submit
+
+  GetRequestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiId
+      RouteKey: 'GET /eligibility-requests/{requestId}'
+      Target: !Sub 'integrations/${AsyncApiIntegration}'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref JwtAuthorizerId
+      AuthorizationScopes:
+        - partner-api/eligibility.read
+
+  SubmitInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AsyncApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*/POST/eligibility-requests'
+
+  GetInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AsyncApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*/GET/eligibility-requests/*'
+
 Outputs:
   RequestTableName:
     Description: Table containing request and idempotency records
@@ -135,3 +310,5 @@ Outputs:
     Value: !GetAtt ProcessingQueue.Arn
   ProcessingDLQUrl:
     Value: !Ref ProcessingDLQ
+  SubmissionUrl:
+    Value: !Sub 'https://${ApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}/eligibility-requests'

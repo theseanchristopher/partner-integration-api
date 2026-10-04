@@ -18,6 +18,8 @@ Resources:
       Scopes:
         - ScopeName: eligibility.read
           ScopeDescription: Read merchant eligibility
+        - ScopeName: eligibility.submit
+          ScopeDescription: Submit asynchronous eligibility requests
 
   PartnerClient:
     Type: AWS::Cognito::UserPoolClient
@@ -31,6 +33,7 @@ Resources:
         - client_credentials
       AllowedOAuthScopes:
         - partner-api/eligibility.read
+        - partner-api/eligibility.submit
       AccessTokenValidity: 60
       TokenValidityUnits:
         AccessToken: minutes
@@ -56,3 +59,6 @@ Outputs:
 
   RequiredScope:
     Value: partner-api/eligibility.read
+
+  SubmitScope:
+    Value: partner-api/eligibility.submit

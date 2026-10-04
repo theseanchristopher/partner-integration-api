@@ -146,3 +146,9 @@ Outputs:
 
   ApiAccessLogGroup:
     Value: !Ref ApiLogGroup
+
+  ApiId:
+    Value: !Ref PartnerApi
+
+  JwtAuthorizerId:
+    Value: !Ref JwtAuthorizer

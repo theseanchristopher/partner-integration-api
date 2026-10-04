@@ -110,3 +110,85 @@ class AsyncStore:
         if record is None or record["clientId"] != client_id:
             return None
         return record
+
+    def claim_request(self, request_id, worker_token):
+        now = int(datetime.now(timezone.utc).timestamp())
+
+        try:
+            response = self.db.update_item(
+                TableName=self.table_name,
+                Key={"pk": {"S": f"REQUEST#{request_id}"}},
+                UpdateExpression=(
+                    "SET #status = :processing, workerToken = :token, "
+                    "leaseUntil = :lease ADD attempts :one"
+                ),
+                ConditionExpression=(
+                    "attribute_exists(pk) AND "
+                    "(#status = :pending OR "
+                    "(#status = :processing AND leaseUntil <= :now))"
+                ),
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":processing": {"S": "PROCESSING"},
+                    ":pending": {"S": "PENDING"},
+                    ":token": {"S": worker_token},
+                    ":lease": {"N": str(now + 90)},
+                    ":now": {"N": str(now)},
+                    ":one": {"N": "1"},
+                },
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error:
+            if error.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+            record = self._get(f"REQUEST#{request_id}")
+            if record and record["status"] in ("SUCCEEDED", "FAILED"):
+                return None
+            raise RuntimeError("Request missing or already being processed")
+
+        return {
+            key: self.deserializer.deserialize(value)
+            for key, value in response["Attributes"].items()
+        }
+
+    def complete_request(self, request_id, worker_token, result=None, error=None):
+        if (result is None) == (error is None):
+            raise ValueError("Provide exactly one of result or error")
+
+        status = "SUCCEEDED" if result is not None else "FAILED"
+        field = "result" if result is not None else "error"
+        payload = result if result is not None else error
+
+        self.db.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"REQUEST#{request_id}"}},
+            UpdateExpression=(
+                "SET #status = :status, #payload = :payload "
+                "REMOVE workerToken, leaseUntil"
+            ),
+            ConditionExpression="workerToken = :token",
+            ExpressionAttributeNames={
+                "#status": "status",
+                "#payload": field,
+            },
+            ExpressionAttributeValues={
+                ":status": {"S": status},
+                ":payload": self.serializer.serialize(payload),
+                ":token": {"S": worker_token},
+            },
+        )
+
+    def release_request(self, request_id, worker_token):
+        self.db.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"REQUEST#{request_id}"}},
+            UpdateExpression=(
+                "SET #status = :pending REMOVE workerToken, leaseUntil"
+            ),
+            ConditionExpression="workerToken = :token",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":pending": {"S": "PENDING"},
+                ":token": {"S": worker_token},
+            },
+        )
