@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Asynchronous partner eligibility processing
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: Bucket containing the Lambda deployment package
+  CodeKey:
+    Type: String
+    Description: S3 object key for the Lambda deployment package
+
+Resources:
+  RequestTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  ProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessingDLQ.Arn
+        maxReceiveCount: 5
+
+  DispatcherLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-dispatcher'
+      RetentionInDays: 7
+
+  DispatcherRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DispatchRequests
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                Resource: !GetAtt RequestTable.StreamArn
+              - Effect: Allow
+                Action: dynamodb:ListStreams
+                Resource: '*'
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !GetAtt RequestTable.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource:
+                  - !GetAtt ProcessingQueue.Arn
+                  - !GetAtt DispatchFailureQueue.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt DispatcherLogGroup.Arn
+
+  DispatcherFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-dispatcher'
+      Runtime: python3.12
+      Handler: dispatcher.lambda_handler
+      Role: !GetAtt DispatcherRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          REQUEST_TABLE_NAME: !Ref RequestTable
+          PROCESSING_QUEUE_URL: !Ref ProcessingQueue
+
+  DispatchFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  DispatcherStreamMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt RequestTable.StreamArn
+      FunctionName: !Ref DispatcherFunction
+      StartingPosition: TRIM_HORIZON
+      BatchSize: 10
+      MaximumBatchingWindowInSeconds: 1
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      MaximumRetryAttempts: 5
+      MaximumRecordAgeInSeconds: 3600
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt DispatchFailureQueue.Arn
+
+Outputs:
+  RequestTableName:
+    Description: Table containing request and idempotency records
+    Value: !Ref RequestTable
+  RequestTableStreamArn:
+    Description: Stream used to forward new requests to SQS
+    Value: !GetAtt RequestTable.StreamArn
+  ProcessingQueueUrl:
+    Value: !Ref ProcessingQueue
+  ProcessingQueueArn:
+    Value: !GetAtt ProcessingQueue.Arn
+  ProcessingDLQUrl:
+    Value: !Ref ProcessingDLQ

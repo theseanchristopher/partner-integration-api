@@ -22,6 +22,16 @@ case "$CODE_BUCKET" in
     ;;
 esac
 
+echo "Deleting asynchronous resources..."
+aws cloudformation delete-stack \
+  --stack-name partner-api-async \
+  --region "$REGION" \
+  --no-cli-pager
+
+aws cloudformation wait stack-delete-complete \
+  --stack-name partner-api-async \
+  --region "$REGION"
+
 echo "Deleting API service..."
 aws cloudformation delete-stack \
   --stack-name partner-api-service \

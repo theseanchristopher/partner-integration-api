@@ -89,6 +89,18 @@ aws cloudformation deploy \
   --region "$REGION" \
   --no-cli-pager
 
+echo "Deploying asynchronous resources..."
+aws cloudformation deploy \
+  --template-file infrastructure/async.yaml \
+  --stack-name partner-api-async \
+  --parameter-overrides \
+    CodeBucket="$CODE_BUCKET" \
+    CodeKey="$CODE_KEY" \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
+  --region "$REGION" \
+  --no-cli-pager
+
 echo "Deployment complete. API endpoint:"
 stack_output partner-api-service EligibilityUrl
 printf '\n'

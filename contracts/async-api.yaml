@@ -1,0 +1,231 @@
+openapi: 3.0.3
+
+info:
+  title: Asynchronous Partner Eligibility API
+  version: 0.1.0
+
+paths:
+  /eligibility-requests:
+    post:
+      summary: Submit an eligibility lookup for asynchronous processing
+      operationId: submitEligibilityRequest
+      security:
+        - partnerOAuth:
+            - partner-api/eligibility.submit
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Identifies one submission within the authenticated client.
+            Reuse the same key and body when retrying.
+            Reusing the key with a different body returns 409.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_-]+$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './unified-api.yaml#/components/schemas/EligibilityRequest'
+            example:
+              merchantId: merchant-1001
+              component: COMPONENT_A
+      responses:
+        '202':
+          description: >
+            Request accepted. Repeated submissions with the same key
+            and body return the same request ID.
+            Retrieve processing status using statusUrl.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedRequest'
+        '400':
+          description: Invalid request body or idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '403':
+          description: Insufficient scope or merchant/component access
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/GatewayError'
+                  - $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency key already used with a different body
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal failure
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '503':
+          description: >
+            Acceptance could not be confirmed.
+            Retry with the same idempotency key and body.
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+  /eligibility-requests/{requestId}:
+    get:
+      summary: Retrieve eligibility request status and result
+      operationId: getEligibilityRequest
+      security:
+        - partnerOAuth:
+            - partner-api/eligibility.read
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[A-Za-z0-9_-]+$'
+      responses:
+        '200':
+          description: >
+            Request found. Check status to determine whether processing
+            is pending, in progress, successful, or failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatus'
+        '400':
+          description: Invalid request ID
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '403':
+          description: Insufficient scope or merchant/component access
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/GatewayError'
+                  - $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '404':
+          description: Request not found or owned by another client
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected internal failure
+          content:
+            application/json:
+              schema:
+                $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    partnerOAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://AUTH_DOMAIN/oauth2/token
+          scopes:
+            partner-api/eligibility.submit: Submit eligibility requests
+            partner-api/eligibility.read: Read eligibility results
+
+  schemas:
+    AcceptedRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - statusUrl
+      properties:
+        requestId:
+          type: string
+          description: Stable identifier used to retrieve the request
+        statusUrl:
+          type: string
+          format: uri-reference
+          description: Path or URL for retrieving current processing status
+      example:
+        requestId: req-123
+        statusUrl: /eligibility-requests/req-123
+    GatewayError:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+      example:
+        message: Unauthorized
+
+    RequestStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - merchantId
+        - component
+        - status
+      properties:
+        requestId:
+          type: string
+        merchantId:
+          type: string
+        component:
+          type: string
+          enum:
+            - COMPONENT_A
+            - COMPONENT_B
+        status:
+          type: string
+          enum:
+            - PENDING
+            - PROCESSING
+            - SUCCEEDED
+            - FAILED
+        result:
+          $ref: './unified-api.yaml#/components/schemas/EligibilityResponse'
+        error:
+          $ref: './unified-api.yaml#/components/schemas/ErrorResponse'
+      oneOf:
+        - properties:
+            status:
+              enum: [PENDING, PROCESSING]
+          not:
+            anyOf:
+              - required: [result]
+              - required: [error]
+        - required: [result]
+          properties:
+            status:
+              enum: [SUCCEEDED]
+          not:
+            required: [error]
+        - required: [error]
+          properties:
+            status:
+              enum: [FAILED]
+          not:
+            required: [result]
