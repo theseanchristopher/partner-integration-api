@@ -147,7 +147,7 @@ components:
       type: oauth2
       flows:
         clientCredentials:
-          tokenUrl: https://AUTH_DOMAIN/oauth2/token
+          tokenUrl: https://partner-api-349821334974-us-east-1.auth.us-east-1.amazoncognito.com/oauth2/token
           scopes:
             partner-api/eligibility.submit: Submit eligibility requests
             partner-api/eligibility.read: Read eligibility results
