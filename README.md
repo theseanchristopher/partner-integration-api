@@ -336,3 +336,37 @@ handling remain to be implemented.
 
 A full deletion and recreation cycle including both HTTP component stacks
 has not yet been verified.
+
+## Live integration demonstration
+
+Website: https://d1e1n5k9v312y7.cloudfront.net
+
+The dashboard supports synchronous and asynchronous eligibility lookups
+for merchant-1001 through COMPONENT_A and COMPONENT_B.
+
+Architecture:
+- CloudFront serves the frontend over HTTPS from a private S3 bucket.
+- Requests under /demo/* are routed to the demonstration API and Lambda.
+- The demo Lambda obtains and caches a Cognito client-credentials token.
+- Cognito credentials and access tokens remain server-side.
+- COMPONENT_A uses IAM/SigV4; COMPONENT_B uses mutual TLS.
+- Asynchronous submissions return a request ID; the page polls for results.
+- Architecture views explain expected internal steps, rather than live traces.
+- Backend business data is simulated.
+
+Verified through the live webpage:
+- COMPONENT_A synchronous: ACTIVE eligibility.
+- COMPONENT_B synchronous: ACTIVE eligibility.
+- COMPONENT_A asynchronous: SUCCEEDED.
+- COMPONENT_B asynchronous: SUCCEEDED.
+- Same idempotency key with a different body: IDEMPOTENCY_CONFLICT.
+- Same key and body: original request ID and completed result returned.
+
+The demonstration API is publicly callable and limits submissions to
+merchant-1001 and the two supported components, with API throttling.
+Polling remains available; webhook delivery is planned.
+
+Infrastructure: infrastructure/web.yaml.
+Frontend: web/index.html, web/styles.css, and web/app.js.
+Backend: src/demo_auth.py and src/demo_handler.py.
+Deployment and cleanup are integrated into the existing scripts.

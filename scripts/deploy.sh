@@ -163,6 +163,48 @@ aws cloudformation deploy \
   --region "$REGION" \
   --no-cli-pager
 
+TOKEN_URL=$(stack_output partner-api-auth TokenUrl)
+ELIGIBILITY_URL=$(stack_output partner-api-service EligibilityUrl)
+UNIFIED_API_BASE_URL="${ELIGIBILITY_URL%/partner-eligibility}"
+
+echo "Deploying demonstration webpage..."
+aws cloudformation deploy \
+  --template-file infrastructure/web.yaml \
+  --stack-name partner-api-web \
+  --parameter-overrides \
+    CodeBucket="$CODE_BUCKET" \
+    CodeKey="$CODE_KEY" \
+    UserPoolId="$USER_POOL_ID" \
+    PartnerClientId="$PARTNER_CLIENT_ID" \
+    TokenUrl="$TOKEN_URL" \
+    UnifiedApiBaseUrl="$UNIFIED_API_BASE_URL" \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
+  --region "$REGION" \
+  --no-cli-pager
+
+WEB_BUCKET=$(stack_output partner-api-web WebBucketName)
+DISTRIBUTION_ID=$(stack_output partner-api-web DistributionId)
+
+echo "Uploading webpage files..."
+aws s3 sync web/ "s3://${WEB_BUCKET}/" \
+  --delete \
+  --cache-control "public,max-age=300" \
+  --region "$REGION" \
+  --no-cli-pager
+
+echo "Refreshing CloudFront cache..."
+aws cloudfront create-invalidation \
+  --distribution-id "$DISTRIBUTION_ID" \
+  --paths "/*" \
+  --query 'Invalidation.Id' \
+  --output text \
+  --no-cli-pager
+
+echo "Website:"
+stack_output partner-api-web WebsiteUrl
+printf '\n'
+
 echo "Deployment complete. API endpoint:"
 stack_output partner-api-service EligibilityUrl
 printf '\n'

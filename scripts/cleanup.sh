@@ -22,6 +22,37 @@ case "$CODE_BUCKET" in
     ;;
 esac
 
+WEB_BUCKET=$(aws cloudformation describe-stacks \
+  --stack-name partner-api-web \
+  --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue | [0]" \
+  --output text \
+  --region "$REGION" \
+  --no-cli-pager)
+
+case "$WEB_BUCKET" in
+  partner-api-web-webbucket-*) ;;
+  *)
+    echo "Unexpected website bucket: $WEB_BUCKET" >&2
+    exit 1
+    ;;
+esac
+
+echo "Emptying website bucket..."
+aws s3 rm "s3://${WEB_BUCKET}" \
+  --recursive \
+  --region "$REGION" \
+  --no-cli-pager
+
+echo "Deleting webpage resources..."
+aws cloudformation delete-stack \
+  --stack-name partner-api-web \
+  --region "$REGION" \
+  --no-cli-pager
+
+aws cloudformation wait stack-delete-complete \
+  --stack-name partner-api-web \
+  --region "$REGION"
+
 echo "Deleting asynchronous resources..."
 aws cloudformation delete-stack \
   --stack-name partner-api-async \

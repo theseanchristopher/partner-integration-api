@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Partner Integration API · Proof of Concept</title>
+<link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+</head>
+<body>
+<header class="masthead"><a class="brand" href="./"><span class="brand-icon" aria-hidden="true">↗</span> Partner Integration API</a><span class="header-label">PROOF OF CONCEPT <span class="dot"></span> AWS SERVERLESS</span></header>
+<main>
+<section class="intro"><div><p class="eyebrow">ENTERPRISE INTEGRATION / INTERACTIVE DEMONSTRATION</p><h1>One contract.<br>Two distinct systems.</h1><p class="intro-copy">A unified API connects different backend formats and authentication methods. Explore a live lookup, then follow the architecture behind it.</p></div><aside class="intro-note"><span class="note-number">02</span><p>Component APIs<br><strong>IAM signing + mutual TLS</strong></p><span class="note-rule"></span><p class="small">Real cloud requests.<br>Simulated merchant data.</p></aside></section>
+<section class="workbench" aria-label="Live demonstration">
+<div class="configuration"><div class="section-heading"><span class="eyebrow">01 / REQUEST WORKBENCH</span><span class="tag">LIVE API</span></div><h2>Make a lookup</h2><p class="muted">Choose a destination and processing mode.</p>
+<form id="lookup-form">
+<fieldset><legend>Backend component</legend><div class="choice-row"><label class="choice"><input type="radio" name="component" value="COMPONENT_A" checked><span><strong>Component A</strong><small>IAM / SigV4</small></span></label><label class="choice"><input type="radio" name="component" value="COMPONENT_B"><span><strong>Component B</strong><small>Client certificate / mTLS</small></span></label></div></fieldset>
+<fieldset><legend>Processing mode</legend><div class="choice-row"><label class="choice"><input type="radio" name="mode" value="sync" checked><span><strong>Synchronous</strong><small>Result in the same response</small></span></label><label class="choice"><input type="radio" name="mode" value="async"><span><strong>Asynchronous</strong><small>Accept, process, poll status</small></span></label></div></fieldset>
+<div class="merchant-field"><span>Demonstration merchant</span><code>merchant-1001</code><span class="tiny">Fixed simulated record · active</span></div>
+<div id="key-field" hidden><label class="field-label" for="idempotency-key">Idempotency key</label><div class="key-row"><input id="idempotency-key" maxlength="128" pattern="[A-Za-z0-9_-]+" autocomplete="off"><button type="button" id="new-key" class="text-button">New key</button></div><p class="tiny">Reuse a key with the same body to retrieve the original request. Change the component with that key to demonstrate a conflict.</p></div>
+<button id="run-button" class="primary" type="submit">Run lookup <span aria-hidden="true">↗</span></button>
+</form><p class="security-note"><span aria-hidden="true">◇</span> Credentials stay on the server. The demo is limited to the configured merchant and two components.</p>
+</div>
+<div class="results"><div class="section-heading"><span class="eyebrow">02 / API EXCHANGE</span><span id="status-badge" class="status-badge">Ready</span></div><div class="exchange-heading"><h2>Request &amp; response</h2><span id="elapsed" class="tiny"></span></div>
+<div class="request-label"><span id="request-method">POST</span><code id="request-path">/partner-eligibility</code></div><pre id="request-json" class="request-code"></pre>
+<div class="result-bar"><span class="field-label">Latest response</span><span id="http-status" class="http-status">Waiting for a request</span></div>
+<div class="console"><div class="console-top"><span class="console-dots" aria-hidden="true">● ● ●</span><span>application/json</span><button type="button" id="copy-response">Copy</button></div><pre id="response-json">Your API response will appear here.</pre></div>
+<div class="event-heading"><h3>Observed activity</h3><span class="tiny">Browser requests and returned status only</span></div><ol id="activity" class="activity"><li class="empty-event">Submit a lookup to begin.</li></ol><p id="result-summary" class="result-summary" role="status" aria-live="polite"></p>
+</div>
+</section>
+<section class="architecture"><div class="architecture-header"><div><p class="eyebrow">03 / SYSTEM DESIGN</p><h2>Behind the response</h2><p class="muted">The deployed architecture. Internal steps are explanatory, not live traces.</p></div><div class="tabs" role="group" aria-label="Architecture view"><button id="sync-tab" type="button" aria-pressed="true">Synchronous</button><button id="async-tab" type="button" aria-pressed="false">Asynchronous</button></div></div>
+<div class="architecture-grid"><div id="flow-diagram" class="flow-diagram"></div><aside class="architecture-notes"><h3>Three authentication boundaries</h3><div class="auth-note"><span class="boundary">01</span><div><strong>Client → unified API</strong><p>Cognito issues a JWT access token. API Gateway validates the token and required scope; Lambda checks merchant and component access.</p></div></div><div class="auth-note"><span class="boundary">02</span><div><strong>Unified service → A</strong><p>The calling Lambda signs its HTTPS request with IAM role credentials. Component A's API Gateway enforces SigV4 and invoke permission.</p></div></div><div class="auth-note"><span class="boundary">03</span><div><strong>Unified service → B</strong><p>The Lambda retrieves an encrypted client certificate and key from SSM Parameter Store. Component B's custom domain requires mTLS and trusts its CA certificate in S3.</p></div></div><div id="failure-notes"></div></aside></div>
+</section>
+<section class="scope-strip"><div><h3>What this demonstrates</h3><p>Contract mapping · authentication · sync/async processing · atomic idempotency · retries · processing DLQ handling</p></div><div><h3>Current scope</h3><p>Backend merchant data is simulated. Polling is implemented. Webhooks, certificate rotation tooling, and richer tracing remain planned.</p></div></section>
+</main><footer><span>Partner Integration API</span><span>Independent proof of concept · No affiliation with a payment network</span></footer>
+</body></html>
