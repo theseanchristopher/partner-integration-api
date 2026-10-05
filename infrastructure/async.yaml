@@ -30,6 +30,13 @@ Parameters:
   ComponentAInvokeArn:
     Type: String
     Description: Exact API route ARN the worker may invoke
+  ComponentBUrl:
+    Type: String
+    Description: Component B mutual TLS endpoint URL
+  ComponentBClientParameterName:
+    Type: String
+    Default: /partner-api/component-b/mtls-client
+    Description: SSM parameter containing the client certificate and key
 
 Resources:
   RequestTable:
@@ -186,6 +193,10 @@ Resources:
                 Action:
                   - execute-api:Invoke
                 Resource: !Ref ComponentAInvokeArn
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ComponentBClientParameterName}'
 
   WorkerFunction:
     Type: AWS::Lambda::Function
@@ -204,6 +215,8 @@ Resources:
           REQUEST_TABLE_NAME: !Ref RequestTable
           ENABLE_FAILURE_TESTS: !Ref EnableFailureTests
           COMPONENT_A_URL: !Ref ComponentAUrl
+          COMPONENT_B_URL: !Ref ComponentBUrl
+          COMPONENT_B_CLIENT_PARAMETER: !Ref ComponentBClientParameterName
 
   WorkerQueueMapping:
     Type: AWS::Lambda::EventSourceMapping

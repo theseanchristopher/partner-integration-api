@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Simulated Component B API with mutual TLS authentication
+
+Parameters:
+  CodeBucket:
+    Type: String
+  CodeKey:
+    Type: String
+  DomainName:
+    Type: String
+    Default: component-b.seanxtopher.net
+  ServerCertificateArn:
+    Type: String
+    Description: Issued ACM server certificate in the API region
+  TruststoreUri:
+    Type: String
+    Description: S3 URI containing the trusted client CA certificate
+
+Resources:
+  ComponentBApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      ProtocolType: HTTP
+      DisableExecuteApiEndpoint: true
+
+  ComponentBLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-lookup'
+      RetentionInDays: 7
+
+  ComponentBRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteComponentLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ComponentBLogGroup.Arn
+
+  ComponentBFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ComponentBLogGroup
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-lookup'
+      Runtime: python3.12
+      Handler: component_b_handler.lambda_handler
+      Role: !GetAtt ComponentBRole.Arn
+      Timeout: 5
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+
+  ComponentBIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ComponentBApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ComponentBFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 6000
+
+  ComponentBRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ComponentBApi
+      RouteKey: 'POST /account-status'
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${ComponentBIntegration}'
+
+  ComponentBInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ComponentBFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ComponentBApi}/*/POST/account-status'
+
+  ComponentBStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ComponentBApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5
+        ThrottlingRateLimit: 2
+
+  ComponentBDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Ref DomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref ServerCertificateArn
+          EndpointType: REGIONAL
+          SecurityPolicy: TLS_1_2
+      MutualTlsAuthentication:
+        TruststoreUri: !Ref TruststoreUri
+
+  ComponentBMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref ComponentBApi
+      DomainName: !Ref ComponentBDomain
+      Stage: !Ref ComponentBStage
+
+Outputs:
+  ComponentBUrl:
+    Value: !Sub 'https://${DomainName}/account-status'
+  DnsTarget:
+    Value: !GetAtt ComponentBDomain.RegionalDomainName
+  ApiId:
+    Value: !Ref ComponentBApi

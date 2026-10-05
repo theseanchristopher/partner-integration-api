@@ -90,6 +90,38 @@ aws cloudformation deploy \
 COMPONENT_A_URL=$(stack_output partner-api-components ComponentAUrl)
 COMPONENT_A_INVOKE_ARN=$(stack_output partner-api-components ComponentAInvokeArn)
 
+echo "Uploading Component B truststore..."
+test -f .local/mtls/ca.crt || {
+  echo "Missing .local/mtls/ca.crt" >&2
+  exit 1
+}
+
+CA_HASH=$(python -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path(".local/mtls/ca.crt").read_bytes()).hexdigest())')
+TRUSTSTORE_KEY="mtls/component-b-ca-${CA_HASH}.pem"
+
+aws s3 cp .local/mtls/ca.crt \
+  "s3://${CODE_BUCKET}/${TRUSTSTORE_KEY}" \
+  --region "$REGION" \
+  --no-cli-pager
+
+echo "Deploying Component B..."
+aws cloudformation deploy \
+  --template-file infrastructure/component-b.yaml \
+  --stack-name partner-api-component-b \
+  --parameter-overrides \
+    CodeBucket="$CODE_BUCKET" \
+    CodeKey="$CODE_KEY" \
+    DomainName="${COMPONENT_B_DOMAIN:-component-b.seanxtopher.net}" \
+    ServerCertificateArn="${COMPONENT_B_CERTIFICATE_ARN:-arn:aws:acm:us-east-1:349821334974:certificate/27dbaa9b-14ef-446f-bcb9-6429564f1b29}" \
+    TruststoreUri="s3://${CODE_BUCKET}/${TRUSTSTORE_KEY}" \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
+  --region "$REGION" \
+  --no-cli-pager
+
+COMPONENT_B_URL=$(stack_output partner-api-component-b ComponentBUrl)
+COMPONENT_B_CLIENT_PARAMETER="/partner-api/component-b/mtls-client"
+
 echo "Deploying API service..."
 aws cloudformation deploy \
   --template-file infrastructure/service.yaml \
@@ -101,6 +133,8 @@ aws cloudformation deploy \
     CodeKey="$CODE_KEY" \
     ComponentAUrl="$COMPONENT_A_URL" \
     ComponentAInvokeArn="$COMPONENT_A_INVOKE_ARN" \
+    ComponentBUrl="$COMPONENT_B_URL" \
+    ComponentBClientParameterName="$COMPONENT_B_CLIENT_PARAMETER" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --region "$REGION" \
@@ -118,6 +152,8 @@ aws cloudformation deploy \
     CodeKey="$CODE_KEY" \
     ComponentAUrl="$COMPONENT_A_URL" \
     ComponentAInvokeArn="$COMPONENT_A_INVOKE_ARN" \
+    ComponentBUrl="$COMPONENT_B_URL" \
+    ComponentBClientParameterName="$COMPONENT_B_CLIENT_PARAMETER" \
     ApiId="$API_ID" \
     JwtAuthorizerId="$JWT_AUTHORIZER_ID" \
     PartnerClientId="$PARTNER_CLIENT_ID" \

@@ -1,8 +1,19 @@
-openapi: 3.0.3
+openapi: 3.1.0
 
 info:
   title: Simulated Component B API
-  version: 0.1.0
+  version: 0.2.0
+  description: >
+    Client certificate authentication is enforced at the custom domain.
+    Clients must present a certificate signed by a CA in the truststore.
+    Missing or untrusted certificates can cause connection rejection
+    before an HTTP response is returned.
+
+servers:
+  - url: https://component-b.seanxtopher.net
+
+security:
+  - clientCertificate: []
 
 paths:
   /account-status:
@@ -39,7 +50,36 @@ paths:
                     type: string
                   enabled:
                     type: boolean
+        '400':
+          description: Invalid JSON, missing fields, or invalid accountReference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Unexpected internal failure
+
+components:
+  securitySchemes:
+    clientCertificate:
+      type: mutualTLS
+      description: >
+        Present the client certificate and prove possession of its
+        private key during the TLS handshake.
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string

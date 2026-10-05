@@ -24,12 +24,12 @@ External clients use one request and response format. The service routes each re
 - Safe replay tooling for failed requests
 - Recovery of requests that remain pending after forwarding failures
 - Webhook notifications and delivery failure handling
-- Separate HTTP endpoint for COMPONENT_B
 
 ## Current backend scope
 COMPONENT_A is a simulated backend hosted in a separate Lambda behind an IAM-authenticated HTTP API.
 Both the synchronous service and asynchronous worker call it over HTTPS using AWS SigV4 signing.
-COMPONENT_B remains a local Python simulation.
+COMPONENT_B is a simulated backend hosted behind a separate HTTP API with mutual TLS on component-b.seanxtopher.net.
+Both calling Lambdas retrieve its client credentials from an encrypted SSM Parameter Store parameter.
 
 ## Local environment
 ```bash
@@ -282,3 +282,57 @@ Verified live behavior:
 - Unified asynchronous request: HTTP 202, followed by SUCCEEDED through status lookup.
 
 A full cleanup and recreation cycle including the component stack remains untested.
+
+
+## Component B mutual TLS integration
+
+- Endpoint: https://component-b.seanxtopher.net/account-status.
+- Infrastructure: infrastructure/component-b.yaml; stack partner-api-component-b.
+- Handler: src/component_b_handler.py.
+- HTTP client: src/component_b_client.py.
+- Request format: accountReference.
+- Response format: accountReference and enabled.
+- The custom domain requires a client certificate trusted by its S3 CA truststore.
+- The default execute-api endpoint is disabled.
+- ACM supplies the publicly trusted server certificate.
+- An OpenSSL-generated CA signs the client certificate.
+- Client credentials are stored as an SSM SecureString using the AWS-managed aws/ssm KMS key.
+- Only the synchronous and worker roles are granted access to that specific parameter by these templates.
+- The HTTP client verifies the server certificate and loads client credentials into a TLS context.
+- Temporary credential files use owner-only permissions and are deleted after loading.
+- The TLS context is cached for five minutes; credential changes are picked up after cache expiry.
+- Private keys and certificates under .local/ are excluded from Git and the deployment ZIP.
+- The Component B contract uses OpenAPI 3.1 to describe mutualTLS authentication.
+
+Verified live behavior:
+- No client certificate: connection rejected.
+- Trusted client certificate: HTTP 200 with enabled true.
+- Unified synchronous lookup: HTTP 200 with ACTIVE eligibility.
+- Unified asynchronous lookup: SUCCEEDED with ACTIVE eligibility.
+
+### Setup and recreation requirements
+
+Deployment requires .local/mtls/ca.crt to upload the truststore.
+The issued ACM certificate and encrypted client parameter must already exist.
+
+Provision the client parameter once from the local client certificate and key:
+
+    python scripts/provision_component_b_client.py
+
+The helper refuses to overwrite an existing parameter.
+
+Cloudflare DNS must point component-b.seanxtopher.net to the deployed stack's DnsTarget.
+Use DNS only so TLS reaches API Gateway directly.
+After stack recreation, check DnsTarget and update the CNAME if it changed.
+
+Cleanup removes the Component B stack and uploaded truststore.
+It retains the separately provisioned ACM certificate, SSM client parameter,
+Cloudflare records, and local certificate files.
+Deleting the retained SSM parameter requires a separate explicit action.
+
+The client certificate is valid for 90 days and the local CA for one year.
+Client credential rotation, certificate expiry monitoring, and revocation
+handling remain to be implemented.
+
+A full deletion and recreation cycle including both HTTP component stacks
+has not yet been verified.

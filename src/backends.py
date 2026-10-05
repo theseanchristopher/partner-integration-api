@@ -4,6 +4,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+
+from component_b_client import call_component_b_http
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
@@ -78,12 +81,17 @@ def call_component_a(request):
 
 
 def call_component_b(request):
-    account_reference = request["accountReference"]
-
-    if account_reference not in COMPONENT_B_ACCOUNTS:
-        raise MerchantNotFoundError("Merchant not found in Component B")
-
-    return {
-        "accountReference": account_reference,
-        "enabled": COMPONENT_B_ACCOUNTS[account_reference],
-    }
+    try:
+        return call_component_b_http(request)
+    except HTTPError as error:
+        if error.code == 404:
+            raise MerchantNotFoundError(
+                "Merchant not found in Component B"
+            ) from error
+        raise ComponentConnectionError(
+            f"Component B returned HTTP {error.code}"
+        ) from error
+    except (BotoCoreError, ClientError, OSError, ValueError) as error:
+        raise ComponentConnectionError(
+            "Component B connection or credential loading failed"
+        ) from error

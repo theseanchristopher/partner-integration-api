@@ -26,6 +26,15 @@ Parameters:
     Type: String
     Description: Exact API route ARN the Lambda may invoke
 
+  ComponentBUrl:
+    Type: String
+    Description: Component B mutual TLS endpoint URL
+
+  ComponentBClientParameterName:
+    Type: String
+    Default: /partner-api/component-b/mtls-client
+    Description: SSM parameter containing the client certificate and key
+
 Resources:
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
@@ -57,6 +66,10 @@ Resources:
                 Action:
                   - execute-api:Invoke
                 Resource: !Ref ComponentAInvokeArn
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ComponentBClientParameterName}'
 
   EligibilityFunction:
     Type: AWS::Lambda::Function
@@ -79,6 +92,8 @@ Resources:
                 "merchant-1001": ["COMPONENT_A", "COMPONENT_B"]
               }
             }
+          COMPONENT_B_URL: !Ref ComponentBUrl
+          COMPONENT_B_CLIENT_PARAMETER: !Ref ComponentBClientParameterName
 
   PartnerApi:
     Type: AWS::ApiGatewayV2::Api
