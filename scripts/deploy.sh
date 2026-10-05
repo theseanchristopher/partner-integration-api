@@ -102,6 +102,7 @@ aws cloudformation deploy \
     ApiId="$API_ID" \
     JwtAuthorizerId="$JWT_AUTHORIZER_ID" \
     PartnerClientId="$PARTNER_CLIENT_ID" \
+    EnableFailureTests="${ENABLE_FAILURE_TESTS:-false}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --region "$REGION" \

@@ -17,6 +17,13 @@ Parameters:
   PartnerClientId:
     Type: String
     Description: Cognito client ID for merchant access configuration
+  EnableFailureTests:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable simulated failures for operator-created test records
 
 Resources:
   RequestTable:
@@ -35,6 +42,7 @@ Resources:
   ProcessingDLQ:
     Type: AWS::SQS::Queue
     Properties:
+      VisibilityTimeout: 180
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
@@ -184,6 +192,7 @@ Resources:
       Environment:
         Variables:
           REQUEST_TABLE_NAME: !Ref RequestTable
+          ENABLE_FAILURE_TESTS: !Ref EnableFailureTests
 
   WorkerQueueMapping:
     Type: AWS::Lambda::EventSourceMapping
@@ -296,6 +305,70 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*/GET/eligibility-requests/*'
+
+  DlqHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-dlq-handler'
+      RetentionInDays: 7
+
+  DlqHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ArchiveProcessingFailures
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ProcessingDLQ.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt RequestTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt DlqHandlerLogGroup.Arn
+
+  DlqHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-dlq-handler'
+      Runtime: python3.12
+      Handler: dlq_handler.lambda_handler
+      Role: !GetAtt DlqHandlerRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          REQUEST_TABLE_NAME: !Ref RequestTable
+
+  DlqHandlerQueueMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt ProcessingDLQ.Arn
+      FunctionName: !Ref DlqHandlerFunction
+      BatchSize: 1
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
 
 Outputs:
   RequestTableName:

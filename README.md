@@ -21,7 +21,7 @@ External clients use one request and response format. The service routes each re
 - Synchronous cleanup/recreation verified; scripts extended to manage asynchronous resources
 
 ## Planned
-- Controlled failure testing, DLQ recovery, and safe replay
+- Safe replay tooling for failed requests
 - Recovery of requests that remain pending after forwarding failures
 - Webhook notifications and delivery failure handling
 - Separate HTTP endpoints for simulated components
@@ -217,6 +217,9 @@ The status endpoint returns HTTP 200 when it retrieves a record, even when that 
 | Unauthorized merchant submission | HTTP 403 |
 | Duplicate SQS delivery after completion | Worker skips lookup; message removed |
 | Local cross-client record lookup | Another client's request is not returned |
+| Retryable failure | First attempt fails; second succeeds |
+| Repeated processing failure | Five failed attempts; message reaches ProcessingDLQ |
+| DLQ handler | Logs successful archival; request confirmed FAILED with no claim; DLQ empty |
 
 ## Failure handling and remaining work
 
@@ -224,8 +227,8 @@ The status endpoint returns HTTP 200 when it retrieves a record, even when that 
 - ProcessingQueue has a separate ProcessingDLQ for exhausted message deliveries.
 - Unexpected worker errors release the claim and report the message for retry.
 - Merchant-not-found is a terminal business error: the worker saves FAILED and acknowledges the message.
-- Failure queues and retry settings are configured; controlled failure/recovery testing remains.
-- Requests reaching ProcessingDLQ are not yet automatically updated to FAILED.
+- Controlled tests verified recovery after one retryable failure and delivery to ProcessingDLQ after five failed attempts.
+- The DLQ handler archives messages in DynamoDB and marks unfinished requests FAILED with PROCESSING_RETRIES_EXHAUSTED before acknowledging them.
 - DispatchFailureQueue contains stream failure metadata; saved requests remain in DynamoDB.
 - Pending-request reconciliation, alarms, and safe replay tooling remain to be implemented.
 - Worker claims protect concurrent processing but do not guarantee exactly-once external side effects after a crash.
@@ -238,3 +241,20 @@ Local DynamoDB helpers require Boto3:
 ```bash
 python -m pip install boto3
 ```
+
+
+## Controlled failure tests
+
+The test helper creates internal test requests directly in DynamoDB.
+These bypass API authentication and ingestion validation.
+
+Failure simulation applies only to internal test requests when explicitly enabled:
+
+    ENABLE_FAILURE_TESTS=true bash scripts/deploy.sh
+    python scripts/create_failure_test.py --fail-attempts 1
+
+Disable failure simulation after testing:
+
+    ENABLE_FAILURE_TESTS=false bash scripts/deploy.sh
+
+Failure simulation was disabled following the verified tests.

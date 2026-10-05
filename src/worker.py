@@ -37,6 +37,22 @@ def lambda_handler(event, context):
                 "component": record["component"],
             }
 
+            # Operator-created test records only; disabled by default.
+            if (
+                os.environ.get("ENABLE_FAILURE_TESTS") == "true"
+                and record.get("clientId") == "internal-failure-test"
+            ):
+                fail_attempts = int(record.get("testFailAttempts", 0))
+                attempt = int(record["attempts"])
+
+                if attempt <= fail_attempts:
+                    logger.warning(
+                        "Simulated failure for request %s on attempt %s",
+                        request_id,
+                        attempt,
+                    )
+                    raise RuntimeError("Simulated retryable component failure")
+
             try:
                 result = check_eligibility(request)
             except MerchantNotFoundError:
