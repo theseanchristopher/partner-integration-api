@@ -18,6 +18,14 @@ Parameters:
     Type: String
     Description: S3 object key for the Lambda deployment package
 
+  ComponentAUrl:
+    Type: String
+    Description: Component A HTTP endpoint URL
+
+  ComponentAInvokeArn:
+    Type: String
+    Description: Exact API route ARN the Lambda may invoke
+
 Resources:
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
@@ -45,6 +53,10 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt LambdaLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Ref ComponentAInvokeArn
 
   EligibilityFunction:
     Type: AWS::Lambda::Function
@@ -60,6 +72,7 @@ Resources:
         S3Key: !Ref CodeKey
       Environment:
         Variables:
+          COMPONENT_A_URL: !Ref ComponentAUrl
           PARTNER_ACCESS_MAP: !Sub |
             {
               "${PartnerClientId}": {

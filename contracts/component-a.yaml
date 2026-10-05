@@ -2,7 +2,14 @@ openapi: 3.0.3
 
 info:
   title: Simulated Component A API
-  version: 0.1.0
+  version: 0.2.0
+  description: >
+    IAM-authenticated component API. Requests require AWS Signature
+    Version 4 signing and execute-api:Invoke permission for this route.
+    The Authorization header contains a signature, not a bearer token.
+
+security:
+  - awsSigV4: []
 
 paths:
   /merchant-status:
@@ -42,7 +49,44 @@ paths:
                     enum:
                       - A
                       - I
+        '400':
+          description: Invalid JSON, missing fields, or invalid merchant_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid AWS signature, or insufficient IAM permission
         '404':
           description: Merchant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Unexpected internal failure
+
+
+components:
+  securitySchemes:
+    awsSigV4:
+      type: apiKey
+      in: header
+      name: Authorization
+      x-amazon-apigateway-authtype: awsSigv4
+      description: >
+        SigV4 signature generated using AWS credentials.
+        This OpenAPI representation does not mean an API key is used.
+        Signing also supplies X-Amz-Date and, for temporary credentials,
+        X-Amz-Security-Token.
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string

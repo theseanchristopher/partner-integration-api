@@ -75,6 +75,21 @@ aws s3 cp build/partner-api.zip \
   --region "$REGION" \
   --no-cli-pager
 
+echo "Deploying component endpoints..."
+aws cloudformation deploy \
+  --template-file infrastructure/components.yaml \
+  --stack-name partner-api-components \
+  --parameter-overrides \
+    CodeBucket="$CODE_BUCKET" \
+    CodeKey="$CODE_KEY" \
+  --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
+  --region "$REGION" \
+  --no-cli-pager
+
+COMPONENT_A_URL=$(stack_output partner-api-components ComponentAUrl)
+COMPONENT_A_INVOKE_ARN=$(stack_output partner-api-components ComponentAInvokeArn)
+
 echo "Deploying API service..."
 aws cloudformation deploy \
   --template-file infrastructure/service.yaml \
@@ -84,6 +99,8 @@ aws cloudformation deploy \
     PartnerClientId="$PARTNER_CLIENT_ID" \
     CodeBucket="$CODE_BUCKET" \
     CodeKey="$CODE_KEY" \
+    ComponentAUrl="$COMPONENT_A_URL" \
+    ComponentAInvokeArn="$COMPONENT_A_INVOKE_ARN" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --region "$REGION" \
@@ -99,6 +116,8 @@ aws cloudformation deploy \
   --parameter-overrides \
     CodeBucket="$CODE_BUCKET" \
     CodeKey="$CODE_KEY" \
+    ComponentAUrl="$COMPONENT_A_URL" \
+    ComponentAInvokeArn="$COMPONENT_A_INVOKE_ARN" \
     ApiId="$API_ID" \
     JwtAuthorizerId="$JWT_AUTHORIZER_ID" \
     PartnerClientId="$PARTNER_CLIENT_ID" \

@@ -42,6 +42,16 @@ aws cloudformation wait stack-delete-complete \
   --stack-name partner-api-service \
   --region "$REGION"
 
+echo "Deleting component endpoints..."
+aws cloudformation delete-stack \
+  --stack-name partner-api-components \
+  --region "$REGION" \
+  --no-cli-pager
+
+aws cloudformation wait stack-delete-complete \
+  --stack-name partner-api-components \
+  --region "$REGION"
+
 echo "Deleting authentication..."
 aws cloudformation delete-stack \
   --stack-name partner-api-auth \

@@ -15,20 +15,21 @@ External clients use one request and response format. The service routes each re
 - Cognito OAuth 2.0 client credentials authentication
 - API Gateway JWT validation and required scope enforcement
 - Application authorization by client, merchant, and component
-- CloudFormation stacks for authentication, deployment storage, synchronous service, and asynchronous processing
+- CloudFormation stacks for authentication, deployment storage, component endpoints, synchronous service, and asynchronous processing
 - CloudWatch API access logs and Lambda execution logs
 - Deployment script verified against existing stacks
-- Synchronous cleanup/recreation verified; scripts extended to manage asynchronous resources
+- Synchronous cleanup/recreation verified; scripts extended to manage asynchronous and component resources
 
 ## Planned
 - Safe replay tooling for failed requests
 - Recovery of requests that remain pending after forwarding failures
 - Webhook notifications and delivery failure handling
-- Separate HTTP endpoints for simulated components
+- Separate HTTP endpoint for COMPONENT_B
 
 ## Current backend scope
-COMPONENT_A and COMPONENT_B are Python simulations inside the Lambda package.
-The deployed API does not yet make HTTP requests to separate backend services.
+COMPONENT_A is a simulated backend hosted in a separate Lambda behind an IAM-authenticated HTTP API.
+Both the synchronous service and asynchronous worker call it over HTTPS using AWS SigV4 signing.
+COMPONENT_B remains a local Python simulation.
 
 ## Local environment
 ```bash
@@ -258,3 +259,26 @@ Disable failure simulation after testing:
     ENABLE_FAILURE_TESTS=false bash scripts/deploy.sh
 
 Failure simulation was disabled following the verified tests.
+
+
+## Component A HTTP integration
+
+- Endpoint: POST /merchant-status on a separate API Gateway HTTP API.
+- Handler: src/component_a_handler.py.
+- Infrastructure: infrastructure/components.yaml; stack partner-api-components.
+- Request format: merchant_id.
+- Response format: merchant_id and status A or I.
+- Authentication: IAM with AWS SigV4 signing.
+- The synchronous Lambda and worker roles may invoke only the configured component route.
+- The adapter obtains AWS credentials from the execution role in Lambda.
+- The adapter uses a three-second network timeout and translates HTTP 404 into merchant-not-found.
+- Deployment supplies the endpoint URL and invocation ARN from stack outputs.
+- Cleanup includes the component stack.
+
+Verified live behavior:
+- Unsigned component request: HTTP 403.
+- IAM-signed component request: HTTP 200.
+- Unified synchronous request: HTTP 200 with ACTIVE eligibility.
+- Unified asynchronous request: HTTP 202, followed by SUCCEEDED through status lookup.
+
+A full cleanup and recreation cycle including the component stack remains untested.

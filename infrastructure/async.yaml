@@ -24,6 +24,12 @@ Parameters:
       - 'true'
       - 'false'
     Description: Enable simulated failures for operator-created test records
+  ComponentAUrl:
+    Type: String
+    Description: Component A HTTP endpoint URL
+  ComponentAInvokeArn:
+    Type: String
+    Description: Exact API route ARN the worker may invoke
 
 Resources:
   RequestTable:
@@ -176,6 +182,10 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: !GetAtt WorkerLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - execute-api:Invoke
+                Resource: !Ref ComponentAInvokeArn
 
   WorkerFunction:
     Type: AWS::Lambda::Function
@@ -193,6 +203,7 @@ Resources:
         Variables:
           REQUEST_TABLE_NAME: !Ref RequestTable
           ENABLE_FAILURE_TESTS: !Ref EnableFailureTests
+          COMPONENT_A_URL: !Ref ComponentAUrl
 
   WorkerQueueMapping:
     Type: AWS::Lambda::EventSourceMapping

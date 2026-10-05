@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Separate simulated component APIs with IAM authentication
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: Bucket containing the Lambda deployment package
+  CodeKey:
+    Type: String
+    Description: S3 object key for the Lambda deployment package
+
+Resources:
+  ComponentApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      ProtocolType: HTTP
+
+  ComponentALogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-component-a'
+      RetentionInDays: 7
+
+  ComponentARole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteComponentLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt ComponentALogGroup.Arn
+
+  ComponentAFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ComponentALogGroup
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-component-a'
+      Runtime: python3.12
+      Handler: component_a_handler.lambda_handler
+      Role: !GetAtt ComponentARole.Arn
+      Timeout: 5
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+
+  ComponentAIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ComponentApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ComponentAFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 6000
+
+  ComponentARoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ComponentApi
+      RouteKey: 'POST /merchant-status'
+      AuthorizationType: AWS_IAM
+      Target: !Sub 'integrations/${ComponentAIntegration}'
+
+  ComponentAInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ComponentAFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ComponentApi}/*/POST/merchant-status'
+
+  ComponentStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ComponentApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 5
+        ThrottlingRateLimit: 2
+
+Outputs:
+  ComponentAUrl:
+    Value: !Sub 'https://${ComponentApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/merchant-status'
+  ComponentAInvokeArn:
+    Value: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ComponentApi}/$default/POST/merchant-status'
