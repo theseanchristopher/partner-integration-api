@@ -3,6 +3,7 @@ import json
 import re
 
 from backends import COMPONENT_A_MERCHANTS
+from merchant_profiles import COMPONENT_A_PROFILES
 
 
 def response(status_code, body):
@@ -52,5 +53,6 @@ def lambda_handler(event, context):
         {
             "merchant_id": merchant_id,
             "status": COMPONENT_A_MERCHANTS[merchant_id],
+            **COMPONENT_A_PROFILES[merchant_id],
         },
     )

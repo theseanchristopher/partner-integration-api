@@ -3,6 +3,7 @@ import json
 import re
 
 from backends import COMPONENT_B_ACCOUNTS
+from merchant_profiles import COMPONENT_B_PROFILES
 
 
 def response(status_code, body):
@@ -52,5 +53,6 @@ def lambda_handler(event, context):
         {
             "accountReference": account_reference,
             "enabled": COMPONENT_B_ACCOUNTS[account_reference],
+            **COMPONENT_B_PROFILES[account_reference],
         },
     )

@@ -370,3 +370,17 @@ Infrastructure: infrastructure/web.yaml.
 Frontend: web/index.html, web/styles.css, and web/app.js.
 Backend: src/demo_auth.py and src/demo_handler.py.
 Deployment and cleanup are integrated into the existing scripts.
+
+### Richer merchant profile mapping
+
+Eligibility responses include country, capabilities, and onboarding
+status with outstanding requirements.
+
+Component A uses flat fields and native codes. Component B uses nested
+objects and boolean flags. The shared adapter validates and normalizes
+both into the same unified schema.
+
+The lookup request is unchanged. Eligibility continues to reflect the
+component's active/inactive account state; profile fields provide context.
+Merchant data is simulated. The webpage mapping cards are explanatory
+examples, not captured backend traffic.

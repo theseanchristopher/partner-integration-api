@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: Simulated Component A API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     IAM-authenticated component API. Requests require AWS Signature
     Version 4 signing and execute-api:Invoke permission for this route.
@@ -41,14 +41,34 @@ paths:
                 required:
                   - merchant_id
                   - status
+                  - country_code
+                  - capability_codes
+                  - onboarding_code
+                  - required_items
                 properties:
                   merchant_id:
                     type: string
                   status:
                     type: string
-                    enum:
-                      - A
-                      - I
+                    enum: [A, I]
+                  country_code:
+                    type: string
+                    pattern: '^[A-Z]{2}$'
+                  capability_codes:
+                    type: array
+                    items:
+                      type: string
+                      enum: [CARD]
+                  onboarding_code:
+                    type: string
+                    enum: [C, P]
+                    description: C means complete; P means pending
+                  required_items:
+                    type: array
+                    description: Outstanding requirements; empty when C
+                    items:
+                      type: string
+                      minLength: 1
         '400':
           description: Invalid JSON, missing fields, or invalid merchant_id
           content:

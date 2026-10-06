@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Simulated Component B API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Client certificate authentication is enforced at the custom domain.
     Clients must present a certificate signed by a CA in the truststore.
@@ -45,11 +45,39 @@ paths:
                 required:
                   - accountReference
                   - enabled
+                  - profile
+                  - capabilities
+                  - onboarding
                 properties:
                   accountReference:
                     type: string
                   enabled:
                     type: boolean
+                  profile:
+                    type: object
+                    required: [country]
+                    properties:
+                      country:
+                        type: string
+                        pattern: '^[A-Z]{2}$'
+                  capabilities:
+                    type: object
+                    required: [cardAcceptance]
+                    properties:
+                      cardAcceptance:
+                        type: boolean
+                  onboarding:
+                    type: object
+                    required: [complete, requirements]
+                    properties:
+                      complete:
+                        type: boolean
+                      requirements:
+                        type: array
+                        description: Outstanding requirements; empty when complete
+                        items:
+                          type: string
+                          minLength: 1
         '400':
           description: Invalid JSON, missing fields, or invalid accountReference
           content:

@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: Unified Partner Eligibility API
-  version: 0.1.0
+  version: 0.2.0
 
 paths:
   /partner-eligibility:
@@ -87,21 +87,43 @@ components:
         - component
         - eligible
         - status
+        - country
+        - capabilities
+        - onboarding
       properties:
         merchantId:
           type: string
         component:
           type: string
-          enum:
-            - COMPONENT_A
-            - COMPONENT_B
+          enum: [COMPONENT_A, COMPONENT_B]
         eligible:
           type: boolean
+          description: Determined by the component's active account state
         status:
           type: string
-          enum:
-            - ACTIVE
-            - INACTIVE
+          enum: [ACTIVE, INACTIVE]
+        country:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [CARD_ACCEPTANCE]
+        onboarding:
+          type: object
+          required: [status, requirements]
+          properties:
+            status:
+              type: string
+              enum: [COMPLETE, PENDING]
+            requirements:
+              type: array
+              description: Outstanding requirements; empty when COMPLETE
+              items:
+                type: string
+                minLength: 1
 
     ErrorResponse:
       type: object
