@@ -4,6 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Partner Integration API · Proof of Concept</title>
 <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+<link rel="stylesheet" href="mapping.css"><script src="mapping.js" defer></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="./"><span class="brand-icon" aria-hidden="true">↗</span> Partner Integration API</a><span class="header-label">PROOF OF CONCEPT <span class="dot"></span> AWS SERVERLESS</span></header>
@@ -26,6 +27,21 @@
 <div class="event-heading"><h3>Observed activity</h3><span class="tiny">Browser requests and returned status only</span></div><ol id="activity" class="activity"><li class="empty-event">Submit a lookup to begin.</li></ol><p id="result-summary" class="result-summary" role="status" aria-live="polite"></p>
 </div>
 </section>
+
+<section class="contract-mapping" aria-labelledby="mapping-heading">
+  <div class="section-heading"><span class="eyebrow">CONTRACT MAPPING / ADAPTER LAYER</span><span class="tag">MAPPING EXAMPLES</span></div>
+  <h2 id="mapping-heading">Different formats. One consistent response.</h2>
+  <p class="muted">Switch the backend component above to explore its transformation. These payloads illustrate the active demonstration record using the rules in src/mappings.py; they are not captured backend traffic. Live responses appear in the API exchange panel.</p>
+  <p id="mapping-context" class="mapping-context"></p>
+  <div class="mapping-grid">
+    <article class="mapping-card"><span class="eyebrow">01 / UNIFIED REQUEST</span><h3>Common client contract</h3><pre id="mapping-unified-request"></pre><p>The client uses merchantId and selects the component.</p></article>
+    <article class="mapping-card"><span class="eyebrow">02 / BACKEND REQUEST</span><h3 id="mapping-request-title"></h3><pre id="mapping-backend-request"></pre><p id="mapping-request-rule"></p></article>
+    <article class="mapping-card"><span class="eyebrow">03 / NATIVE RESPONSE</span><h3 id="mapping-response-title"></h3><pre id="mapping-native-response"></pre><p id="mapping-native-rule"></p></article>
+    <article class="mapping-card"><span class="eyebrow">04 / UNIFIED RESPONSE</span><h3>Normalized eligibility</h3><pre id="mapping-unified-response"></pre><p id="mapping-response-rule"></p></article>
+  </div>
+  <div class="mapping-rules"><h3>Normalization rules</h3><p id="mapping-rules"></p><p>Both processing modes use these mappings. Synchronous requests return the normalized result immediately; asynchronous workers save it for retrieval through the status endpoint.</p></div>
+</section>
+
 <section class="architecture"><div class="architecture-header"><div><p class="eyebrow">03 / SYSTEM DESIGN</p><h2>Behind the response</h2><p class="muted">The deployed architecture. Internal steps are explanatory, not live traces.</p></div><div class="tabs" role="group" aria-label="Architecture view"><button id="sync-tab" type="button" aria-pressed="true">Synchronous</button><button id="async-tab" type="button" aria-pressed="false">Asynchronous</button></div></div>
 <div class="architecture-grid"><div id="flow-diagram" class="flow-diagram"></div><aside class="architecture-notes"><h3>Three authentication boundaries</h3><div class="auth-note"><span class="boundary">01</span><div><strong>Client → unified API</strong><p>Cognito issues a JWT access token. API Gateway validates the token and required scope; Lambda checks merchant and component access.</p></div></div><div class="auth-note"><span class="boundary">02</span><div><strong>Unified service → A</strong><p>The calling Lambda signs its HTTPS request with IAM role credentials. Component A's API Gateway enforces SigV4 and invoke permission.</p></div></div><div class="auth-note"><span class="boundary">03</span><div><strong>Unified service → B</strong><p>The Lambda retrieves an encrypted client certificate and key from SSM Parameter Store. Component B's custom domain requires mTLS and trusts its CA certificate in S3.</p></div></div><div id="failure-notes"></div></aside></div>
 </section>

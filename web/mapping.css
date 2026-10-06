@@ -1,0 +1,14 @@
+
+.contract-mapping { margin: 32px 0; padding: 32px; background: #fff; border: 1px solid #dce4ed; border-radius: 16px; }
+.contract-mapping h2 { margin: 16px 0 12px; }
+.contract-mapping > .muted { max-width: 960px; line-height: 1.6; }
+.mapping-context { color: #183d62; font-weight: 600; margin: 24px 0 16px; }
+.mapping-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.mapping-card { min-width: 0; padding: 20px; background: #f5f8fc; border: 1px solid #dce4ed; border-radius: 12px; }
+.mapping-card:last-child { background: #eef8f4; border-color: #bddfce; }
+.mapping-card h3 { font-size: 17px; margin: 12px 0 16px; }
+.mapping-card pre { margin: 0; padding: 16px; border-radius: 8px; background: #11233a; color: #e4edf7; font-size: 12px; line-height: 1.7; overflow-x: auto; }
+.mapping-card p, .mapping-rules p { font-size: 14px; line-height: 1.6; color: #4b5f73; }
+.mapping-rules { margin-top: 20px; padding: 4px 20px; border-left: 3px solid #287d88; }
+@media (max-width: 1100px) { .mapping-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .contract-mapping { padding: 20px; } .mapping-grid { grid-template-columns: minmax(0, 1fr); } }
